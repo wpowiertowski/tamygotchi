@@ -108,29 +108,40 @@ Resolve these from the schematic (link in section 9) and record the answers here
 
 ### 2.3 Pin map
 
-**Not verified for the 1.75C.** The values below are from the non-C sibling [S]. Replace them with values from the BSP header or schematic, then mark the table [V].
+Source: `include/bsp/esp32_s3_touch_amoled_1_75c.h` in BSP v3.0.0, downloaded from the component registry on 2026-11-15 [V]. Not yet checked against the schematic.
 
-| Signal | GPIO (sibling) | 1.75C confirmed |
+| Signal | GPIO (1.75C, BSP 3.0.0) | Sibling (non-C) |
 |---|---|---|
-| I2C SDA (shared bus) | 15 | |
-| I2C SCL (shared bus) | 14 | |
-| Touch INT | 11 | |
-| Touch RST | 40 | |
-| I2S LRCLK | 45 | |
-| I2S BCLK | | |
-| I2S MCLK | | |
-| I2S DOUT (to ES8311) | | |
-| I2S DIN (from ES7210) | | |
-| LCD QSPI CS | | |
-| LCD QSPI SCLK | | |
-| LCD QSPI D0..D3 | | |
-| LCD RST | | |
-| LCD TE | | |
-| PA enable | | |
-| PWR button | | |
-| BOOT button | 0 [A] | |
+| I2C SDA (shared bus) | 15 | 15 |
+| I2C SCL (shared bus) | 14 | 14 |
+| Touch INT | 11 | 11 |
+| Touch RST | **2** | 40 |
+| I2S LRCLK (`BSP_I2S_LCLK`) | 45 | 45 |
+| I2S BCLK (`BSP_I2S_SCLK`) | 9 | |
+| I2S MCLK | 16 | |
+| I2S DOUT (to ES8311) | 8 | |
+| I2S DIN (from ES7210, `BSP_I2S_DSIN`) | 10 | |
+| LCD QSPI CS | 12 | |
+| LCD QSPI SCLK (`BSP_LCD_PCLK`) | 38 | |
+| LCD QSPI D0..D3 | 4, 5, 6, 7 | |
+| LCD RST | 1 | |
+| LCD TE | not defined in BSP | |
+| LCD backlight | none (`GPIO_NUM_NC`, AMOLED) | |
+| PA enable (`BSP_POWER_AMP_IO`) | 46 | |
+| PWR button | not in BSP; check schematic (may go to AXP2101 PWRON) | |
+| BOOT button | not in BSP; 0 [A] | 0 [A] |
 
-On Waveshare's other CO5300 boards the display has a dedicated QSPI bus and the I2C bus is shared by touch, PMIC, IMU and codecs [S]. Expect the same here.
+What else the BSP 3.0.0 source shows [V]:
+
+- Capability flags: `BSP_CAPS_BUTTONS 0`, `BSP_CAPS_IMU 0`, `BSP_CAPS_SDCARD 0`; display, touch, audio, speaker and mic are 1. Buttons, IMU and SD card are not wrapped by the BSP.
+- There is no AXP2101 driver or call in the BSP. Battery and charge status need your own driver.
+- `bsp_audio_init(NULL)` sets up I2S as 16-bit mono duplex at **22050 Hz**. To use a different rate, pass your own `i2s_std_config_t`.
+- I2C defaults to port 1 at 400 kHz; I2S defaults to port 1.
+- The panel init calls `esp_lcd_panel_set_gap(panel, 0x06, 0)`, and `display.h` has `BSP_LCD_BIGENDIAN (0)`.
+- LVGL runs through `esp_lvgl_adapter` (~0.6) with a 50-line double draw buffer.
+- Dependencies: `esp_codec_dev ~1.5`, `esp_lcd_co5300`, `esp_lcd_panel_io_additions ^1`, `esp_lvgl_adapter ~0.6`, `lvgl >=8,<10`, `usb ^1.0.0`, `esp_lcd_touch_cst9217`, `idf >=5.5`.
+
+The I2C bus is shared by touch, PMIC, IMU and codecs [S].
 
 ---
 
@@ -154,8 +165,8 @@ ESP32-S3R8
 
 - Registry name: `waveshare/esp32_s3_touch_amoled_1_75c`, version 3.0.0, target `esp32s3` [V]
 - Source: `github.com/waveshareteam/Waveshare-ESP32-components`, path `bsp/esp32_s3_touch_amoled_1_75c` [V]
-- Has 8 dependencies; reported to include LVGL, the ES7210 codec driver, SPIFFS, FATFS and USB [S]
-- API is expected to follow the esp-bsp convention (`bsp_display_start()`, `bsp_display_lock()`, `bsp_display_unlock()`, `bsp_i2c_init()`, audio init helpers) [A]. Confirm in the BSP header.
+- Has 8 dependencies, listed in section 2.3 [V]
+- API follows the esp-bsp convention: `bsp_i2c_init()`, `bsp_i2c_get_handle()`, `bsp_audio_init()`, `bsp_audio_codec_speaker_init()`, `bsp_audio_codec_microphone_init()`, `bsp_spiffs_mount()`, `bsp_display_start()`, `bsp_display_start_with_config()`, `bsp_display_get_input_dev()`, `bsp_display_lock()`, `bsp_display_unlock()` [V]
 - The pin definitions for section 2.3 live in the BSP's main header.
 
 ### 3.2 Vendor examples
