@@ -20,6 +20,44 @@ Every fact carries a status:
 | ESP-IDF version | v5.5.x, pinned | A third-party project built and measured on this exact board with v5.5.4. Re-check the BSP before moving to v6.x. |
 | Host | macOS, EIM via Homebrew | Espressif's documented install route. |
 | Editor | VS Code + ESP-IDF extension (optional) | Waveshare's recommendation; `idf.py` on the command line is enough. |
+| Build flow | ESP-IDF's native CMake build, driven by `idf.py` | See section 1.1. |
+
+### 1.1 Build flow
+
+**Decision: the stock ESP-IDF CMake + Ninja build via `idf.py`, with the IDF version pinned in two places: EIM locally and the `espressif/idf:vX.Y.Z` Docker image in CI.**
+
+What the ESP-IDF build does beyond compiling, and what any replacement would have to rebuild:
+
+- Kconfig / menuconfig → `sdkconfig` → generated `sdkconfig.h` [V]
+- IDF Component Manager: resolves `idf_component.yml` (the BSP is delivered this way) and writes `dependencies.lock` [V]
+- linker fragment generation (ldgen) for IRAM/flash placement [A]
+- separate bootloader sub-build, partition table generation, esptool flash arguments [A]
+
+The vendor BSP, the vendor examples and the a3d reference project all ship as ESP-IDF CMake components or projects [V]. Using the native build means they work unchanged.
+
+Pinning and reproducibility:
+
+| Layer | Pin | Status |
+|---|---|---|
+| ESP-IDF and toolchain, local | `eim install -i v5.5.x` | [V] |
+| ESP-IDF and toolchain, CI | `espressif/idf:v5.5.x` Docker tag. Docker Hub has `v5.5` through `v5.5.6` and `release-v5.5` (checked 2026-11-15) | [V] |
+| Components (BSP, LVGL, drivers) | `dependencies.lock`, committed | [V] |
+| Config | `sdkconfig.defaults`, committed | [V] |
+
+CI: `espressif/esp-idf-ci-action@v1` with `esp_idf_version: v5.5.x` and `target: esp32s3`. Its `esp_idf_version` input takes Docker Hub tags [V]. Local and CI should use the same patch version. v5.5.4 is the version the a3d project measured on this board; v5.5.6 is the newest 5.5.x tag on Docker Hub.
+
+Host-side testing: ESP-IDF's `linux` target (`idf.py --preview set-target linux`) runs logic tests on the host. It is experimental in v5.5 and has only mock support for `driver` [V], so use it for application logic, not drivers. To iterate on the UI, a separate plain-CMake LVGL + SDL simulator build is an option [A].
+
+An optional `Makefile` or `justfile` can wrap common `idf.py` commands. It must not replace them.
+
+#### Rejected build flows
+
+| Option | Reason |
+|---|---|
+| Bazel | No maintained ESP-IDF rules found. `simonhorlick/bazel_esp32` targets Arduino and is about eight years old. The one current Bazel-based ESP32-S3 project found (GizClaw/gizos) keeps ESP-IDF's CMake components and an external IDF checkout; Bazel orchestrates and does not replace the IDF build [V]. Bazel would have to either shell out to `idf.py` (adding a layer for no gain) or reimplement Kconfig, ldgen, the bootloader build and the component manager. Revisit only if this becomes part of a larger Bazel monorepo. |
+| PlatformIO (`espidf` framework) | Works, but Espressif states it does not maintain ESP-IDF support in PlatformIO [V]. Official IDF support lags upstream: platform 6.12.0 added 5.5 and 6.13.0 added 5.5.3 [V]. It adds a second config layer (`platformio.ini`) on top of sdkconfig and the component manager. |
+| Plain CMake without `idf.py` | Possible because `idf.py` is a wrapper around CMake [V], but you lose `flash`, `monitor`, `menuconfig` and component manager integration for no gain. |
+| Meson, Make, SCons | No ESP-IDF support. The GNU Make build was removed after v4.x [A]. |
 
 ### Rejected options
 
@@ -59,7 +97,7 @@ Every fact carries a status:
 
 ### 2.2 Open hardware questions
 
-Resolve these from the schematic (link in section 8) and record the answers here.
+Resolve these from the schematic (link in section 9) and record the answers here.
 
 | Question | What the sources say |
 |---|---|
